@@ -1,0 +1,81 @@
+spring:
+  application:
+    name: cyber-sentinel-bootstrap
+  threads:
+    virtual:
+      enabled: true
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  cloud:
+    gateway:
+      default-filters:
+        - TokenAudit
+      routes:
+        - id: openrouter-chat
+          uri: https://openrouter.ai
+          predicates:
+            - Path=/llm/openrouter/**
+          filters:
+            - RewritePath=/llm/openrouter/(?<segment>.*), /${segment}
+            - AddRequestHeader=Authorization, Bearer ${OPENROUTER_API_KEY:demo-key}
+            - name: AiRateLimit
+              args:
+                replenishRate: 20
+                burstCapacity: 40
+        - id: siliconflow-chat
+          uri: https://api.siliconflow.cn
+          predicates:
+            - Path=/llm/siliconflow/**
+          filters:
+            - RewritePath=/llm/siliconflow/(?<segment>.*), /${segment}
+            - AddRequestHeader=Authorization, Bearer ${SILICONFLOW_API_KEY:demo-key}
+            - name: AiRateLimit
+              args:
+                replenishRate: 15
+                burstCapacity: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+cyber-sentinel:
+  cli:
+    enabled: false
+  gateway:
+    routes:
+      - routeId: openrouter-chat
+        provider: openrouter
+        targetUri: https://openrouter.ai
+        model: openai/gpt-4.1-mini
+        path: /llm/openrouter/**
+        role: primary
+        priority: 1
+        fallbackProvider: siliconflow
+        metadata:
+          region: global
+          proxyRequired: "true"
+      - routeId: siliconflow-chat
+        provider: siliconflow
+        targetUri: https://api.siliconflow.cn
+        model: deepseek-ai/DeepSeek-V3
+        path: /llm/siliconflow/**
+        role: secondary
+        priority: 2
+        fallbackProvider: openrouter
+        metadata:
+          region: cn
+          proxyRequired: "false"
+
+langchain4j:
+  open-ai:
+    chat-model:
+      api-key: ${OPENAI_API_KEY:demo-key}
+      model-name: gpt-4o-mini
+      timeout: PT30S
